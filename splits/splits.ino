@@ -5,7 +5,6 @@
 #define ARDUINO_SIGNAL_IN 7
 #define SENSOR_IN 2
 
-int sensor;
 int arduino_signal;
 
 unsigned long split_time = 0;
@@ -13,36 +12,29 @@ unsigned long start_time = 0;
 
 float best_time = 0;
 
-
-float previous_time = 0;
-
-unsigned long ms = 0;
-
 Bounce debouncer = Bounce();
 
 void setup() {
   pinMode(LED, OUTPUT);
   pinMode(ARDUINO_SIGNAL_OUT, OUTPUT);
   pinMode(ARDUINO_SIGNAL_IN, INPUT);
-  pinMode(SENSOR_IN, INPUT);
+  
+  digitalWrite(ARDUINO_SIGNAL_OUT, LOW);
 
   debouncer.attach(SENSOR_IN);
   debouncer.interval(5);
-  
-  digitalWrite(ARDUINO_SIGNAL_OUT, LOW);
   
   Serial.begin(9600);
 }
 
 void loop() {
   debouncer.update();
-
-  int sensor = debouncer.read();
-
+  
+  int value = debouncer.read();
   arduino_signal = digitalRead(ARDUINO_SIGNAL_IN);
 
-  // Fix sensor trigger
-  if (sensor == LOW) {
+
+  if (value == LOW) {
     split_time = millis();
     
     digitalWrite(LED, HIGH);
@@ -56,12 +48,22 @@ void loop() {
       Serial.print(final_time, 3);
       Serial.println(" s");
       Serial.println("-----");
+      start_time = 0;
 
       if (best_time == 0 || final_time < best_time) {
         best_time = final_time;
         Serial.println("!!! NEW RECORD !!!");
         // SAVE TO EEPROM
       }
+    }
+  }
+
+  float some_time = calc_time(start_time, millis());
+  if (best_time != 0 && start_time != 0 && some_time > best_time) {
+    if (millis() / 200 % 2 == 0) {
+      digitalWrite(LED, HIGH);
+    } else {
+      digitalWrite(LED, LOW);
     }
   }
 
