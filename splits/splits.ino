@@ -1,46 +1,59 @@
 #include <Bounce2.h>
+#include <EEPROM.h>
 
 #define LED 13
 #define ARDUINO_SIGNAL_OUT 8
 #define ARDUINO_SIGNAL_IN 7
 #define SENSOR_IN 2
 
-int arduino_signal;
+#define BEST_TIME_ADDRESS 0
 
 unsigned long split_time = 0;
 unsigned long start_time = 0;
 
 float best_time = 0;
 
-Bounce debouncer = Bounce();
+Bounce sensor_debounce = Bounce();
+Bounce arduino_debounce = Bounce();
 
 void setup() {
   pinMode(LED, OUTPUT);
   pinMode(ARDUINO_SIGNAL_OUT, OUTPUT);
-  pinMode(ARDUINO_SIGNAL_IN, INPUT);
   
   digitalWrite(ARDUINO_SIGNAL_OUT, LOW);
 
-  debouncer.attach(SENSOR_IN);
-  debouncer.interval(5);
+  sensor_debounce.attach(SENSOR_IN);
+  sensor_debounce.interval(5);
+  arduino_debounce.attach(ARDUINO_SIGNAL_IN);
+  arduino_debounce.interval(20);
+
+  float foo = 0.00f;
+  EEPROM.put(BEST_TIME_ADDRESS, foo);
   
+  float stored_time;
+  EEPROM.get(BEST_TIME_ADDRESS, stored_time);
+  if (stored_time > 0) {
+    best_time = stored_time;
+  }
+
   Serial.begin(9600);
+  Serial.println(stored_time);
 }
 
 void loop() {
-  debouncer.update();
+  sensor_debounce.update();
+  arduino_debounce.update();
   
-  int value = debouncer.read();
-  arduino_signal = digitalRead(ARDUINO_SIGNAL_IN);
+  int sensor_value = sensor_debounce.read();
+  int arduino_value = arduino_debounce.read();
 
-
-  if (value == LOW) {
+  if (sensor_value == HIGH) {
     split_time = millis();
     
     digitalWrite(LED, HIGH);
-    digitalWrite(ARDUINO_SIGNAL_OUT, HIGH);
-    delay(10);
-    digitalWrite(ARDUINO_SIGNAL_OUT, LOW);
+    if (start_time == 0) {
+      notify_next();
+    }
 
     if (start_time > 0) {
       float final_time = calc_time(start_time, split_time);
@@ -51,25 +64,40 @@ void loop() {
       start_time = 0;
 
       if (best_time == 0 || final_time < best_time) {
-        best_time = final_time;
         Serial.println("!!! NEW RECORD !!!");
-        // SAVE TO EEPROM
+        best_time = final_time;
+        store_best_time(best_time);
       }
     }
   }
 
   float some_time = calc_time(start_time, millis());
   if (best_time != 0 && start_time != 0 && some_time > best_time) {
-    if (millis() / 200 % 2 == 0) {
-      digitalWrite(LED, HIGH);
-    } else {
-      digitalWrite(LED, LOW);
-    }
+    flashing_led();
   }
 
-  if (arduino_signal == HIGH) {
+  if (arduino_value == HIGH) {
     Serial.println("ZING!!!!!!!");
     start_time = millis();
+    digitalWrite(LED, LOW);
+    notify_next();
+  }
+}
+
+void store_best_time(float f) {
+  EEPROM.put(BEST_TIME_ADDRESS, best_time);
+}
+
+void notify_next() {
+  digitalWrite(ARDUINO_SIGNAL_OUT, HIGH);
+  delay(10);
+  digitalWrite(ARDUINO_SIGNAL_OUT, LOW);
+}
+
+void flashing_led() {
+  if (millis() / 200 % 2 == 0) {
+    digitalWrite(LED, HIGH);
+  } else {
     digitalWrite(LED, LOW);
   }
 }
